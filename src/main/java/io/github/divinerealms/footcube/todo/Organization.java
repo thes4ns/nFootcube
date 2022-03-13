@@ -10,19 +10,133 @@ import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.Sign;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Slime;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.block.SignChangeEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.util.Vector;
 
 import java.util.Collection;
 
 public class Organization {
   @Getter private final Plugin plugin;
   @Getter private final Logger logger;
-  @Getter private final int setupType = 0, lobby2v2 = 0, lobby3v3 = 0, lobby4v4 = 0;
+ /* @Getter private final int setupType = 0, lobby2v2 = 0, lobby3v3 = 0, lobby4v4 = 0; */
+  public String pluginString;
+  
+  private String adminString;
+  
+  private String or;
+  
+  private String setupGuy;
+  
+  private Location setupLoc;
+  
+  private Match[] matches2v2;
+  
+  private Match[] matches3v3;
+  
+  private Match[] matches4v4;
+  
+  private int lobby2v2;
+  
+  private int lobby3v3;
+  
+  private int lobby4v4;
+  
+  public ArrayList<Slime> practiceBalls;
+  
+  public HashMap<String, Integer> waitingPlayers;
+  
+  public ArrayList<String> playingPlayers;
+  
+  private HashMap<Player, Player> team;
+  
+  private HashMap<Player, Player> teamReverse;
+  
+  private HashMap<Player, Integer> teamType;
+  
+  private Player[][] waitingTeams;
+  
+  private ArrayList<Player> waitingTeamPlayers;
+  
+  private Match[] leftMatches;
+  
+  private boolean[] leftPlayerIsRed;
+  
+  private long announcementTime;
+ 
   /*@Getter private final Location setupLocation;
   @Getter private final ArrayList<Slime> practiceCubes;
   @Getter private final HashMap<Player, Player> firstTeam, secondTeam;*/
   @Getter @Setter private static Economy econ = null;
 
   public Organization(final Plugin plugin, final UtilManager utilManager) {
+    this.pluginString = ChatColor.translateAlternateColorCodes('&', "&b&lFUT &8");
+    this.adminString = ChatColor.translateAlternateColorCodes('&', "&b&lFUT &c&lAdmin &8");
+    this.or = ChatColor.YELLOW + "|" + ChatColor.AQUA;
+    this.setupGuy = null;
+    this.setupType = 0;
+    this.setupLoc = null;
+    this.matches2v2 = new Match[0];
+    this.matches3v3 = new Match[0];
+    this.matches4v4 = new Match[0];
+    this.lobby2v2 = 0;
+    this.lobby3v3 = 0;
+    this.lobby4v4 = 0;
+    this.practiceBalls = new ArrayList<>();
+    this.waitingPlayers = new HashMap<>();
+    this.playingPlayers = new ArrayList<>();
+    this.team = new HashMap<>();
+    this.teamReverse = new HashMap<>();
+    this.teamType = new HashMap<>();
+    this.waitingTeams = new Player[0][0];
+    this.waitingTeamPlayers = new ArrayList<>();
+    this.leftMatches = new Match[0];
+    this.leftPlayerIsRed = new boolean[0];
+    this.wins = new Stats();
+    this.matches = new Stats();
+    this.ties = new Stats();
+    this.goals = new Stats();
+    this.store = new Stats();
+    this.winStreak = new Stats();
+    this.bestWinStreak = new Stats();
+    this.uuidConverter = new UUIDConverter();
+    this.economy = null;
+    this.plugin = pl;
+    this.disableCommands = new DisableCommands(this.plugin, this);
+    this.plugin.getServer().getPluginManager().registerEvents(this, (Plugin)this.plugin);
+    FileConfiguration cfg = this.plugin.getConfig();
+    cfg.addDefault("arenas.2v2.amount", Integer.valueOf(0));
+    cfg.addDefault("arenas.3v3.amount", Integer.valueOf(0));
+    cfg.addDefault("arenas.4v4.amount", Integer.valueOf(0));
+    cfg.options().copyDefaults(true);
+    this.plugin.saveConfig();
+    loadArenas(cfg);
     this.plugin = plugin;
     this.logger = utilManager.getLogger();
     if (!setupEconomy()) getLogger().info("&cVault not found, plugin won't use economy.");
@@ -280,7 +394,7 @@ public class Organization {
         } else {
           p.sendMessage(ChatColor.AQUA + " " + ChatColor.BOLD + "FUT" + ChatColor.DARK_GRAY + " + ChatColor.GRAY + " Ne mozete izaci jer je utakmica pocela");
         } 
-      } else if (args[0].equalsIgnoreCase("setuparena") && p.hasPermission("footcube.admin")) {
+      } else if (args[0].equalsIgnoreCase("setuparena") && p.hasPermission("nfootcube.admin")) {
         if (this.setupGuy == null) {
           if (args.length < 2) {
             p.sendMessage(ChatColor.AQUA + ChatColor.BOLD + "FUT" + ChatColor.DARK_GRAY + " + ChatColor.RED + " Morate navesti vrstu arene...");
@@ -306,7 +420,7 @@ public class Organization {
         } else {
           p.sendMessage(ChatColor.AQUA + " " + ChatColor.BOLD + "FUT" + ChatColor.DARK_GRAY + " + ChatColor.AQUA + this.setupGuy + ChatColor.GRAY + " vec radi arene...");
         } 
-      } else if (args[0].equalsIgnoreCase("cleararenas") && p.hasPermission("footcube.admin")) {
+      } else if (args[0].equalsIgnoreCase("cleararenas") && p.hasPermission("nfootcube.admin")) {
         FileConfiguration cfg = this.plugin.getConfig();
         cfg.set("arenas", null);
         cfg.addDefault("arenas.2v2.amount", Integer.valueOf(0));
@@ -363,7 +477,7 @@ public class Organization {
         p.sendMessage(ChatColor.GRAY + "/fc stats");
         p.sendMessage(ChatColor.GRAY + "/fc store");
         p.sendMessage(ChatColor.GRAY + "/fc best");
-        if (p.hasPermission("footcube.admin")) {
+        if (p.hasPermission("nfootcube.admin")) {
           p.sendMessage(String.valueOf(String.valueOf(String.valueOf(String.valueOf(this.adminString)))) + ChatColor.DARK_AQUA + "/fc setuparena [2v2, 3v3 or 4v4]");
           p.sendMessage(String.valueOf(String.valueOf(String.valueOf(String.valueOf(this.adminString)))) + ChatColor.DARK_AQUA + "/fc cleararenas");
         } 
@@ -389,8 +503,44 @@ public class Organization {
 
   }
 
-  private void loadArenas() {
-
+  private void loadArenas(FileConfiguration cfg) {
+    int i;
+    for (i = 1; i <= cfg.getInt("arenas.2v2.amount"); i++) {
+      World world = this.plugin.getServer().getWorld(cfg.getString("arenas.world"));
+      String blue = "arenas.2v2." + i + ".blue.";
+      String red = "arenas.2v2." + i + ".red.";
+      Location b = new Location(world, cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "x"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "y"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "z"));
+      b.setPitch((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "pitch"));
+      b.setYaw((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "yaw"));
+      Location r = new Location(world, cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "x"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "y"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "z"));
+      r.setPitch((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "pitch"));
+      r.setYaw((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "yaw"));
+      addArena(2, b, r);
+    } 
+    for (i = 1; i <= cfg.getInt("arenas.3v3.amount"); i++) {
+      World world = this.plugin.getServer().getWorld(cfg.getString("arenas.world"));
+      String blue = "arenas.3v3." + i + ".blue.";
+      String red = "arenas.3v3." + i + ".red.";
+      Location b = new Location(world, cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "x"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "y"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "z"));
+      b.setPitch((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "pitch"));
+      b.setYaw((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "yaw"));
+      Location r = new Location(world, cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "x"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "y"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "z"));
+      r.setPitch((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "pitch"));
+      r.setYaw((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "yaw"));
+      addArena(3, b, r);
+    } 
+    for (i = 1; i <= cfg.getInt("arenas.4v4.amount"); i++) {
+      World world = this.plugin.getServer().getWorld(cfg.getString("arenas.world"));
+      String blue = "arenas.4v4." + i + ".blue.";
+      String red = "arenas.4v4." + i + ".red.";
+      Location b = new Location(world, cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "x"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "y"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "z"));
+      b.setPitch((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "pitch"));
+      b.setYaw((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(blue)))) + "yaw"));
+      Location r = new Location(world, cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "x"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "y"), cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "z"));
+      r.setPitch((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "pitch"));
+      r.setYaw((float)cfg.getDouble(String.valueOf(String.valueOf(String.valueOf(String.valueOf(red)))) + "yaw"));
+      addArena(4, b, r);
+    } 
   }
 
   private boolean setupEconomy() {
