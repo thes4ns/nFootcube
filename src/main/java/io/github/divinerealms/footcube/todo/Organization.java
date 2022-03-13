@@ -118,14 +118,6 @@ public class Organization {
     this.waitingTeamPlayers = new ArrayList<>();
     this.leftMatches = new Match[0];
     this.leftPlayerIsRed = new boolean[0];
-    this.wins = new Stats();
-    this.matches = new Stats();
-    this.ties = new Stats();
-    this.goals = new Stats();
-    this.store = new Stats();
-    this.winStreak = new Stats();
-    this.bestWinStreak = new Stats();
-    this.uuidConverter = new UUIDConverter();
     this.economy = null;
     this.plugin = pl;
     this.disableCommands = new DisableCommands(this.plugin, this);
